@@ -1,6 +1,9 @@
 package com.artemchep.basics_multithreading;
 
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.util.Log;
 import android.view.View;
 
 import androidx.annotation.UiThread;
@@ -22,6 +25,18 @@ public class MainActivity extends AppCompatActivity {
 
     private MessageAdapter mAdapter = new MessageAdapter(mList);
 
+    BlockingQueue queue = new BlockingQueue();
+    Thread worker = new Thread(new Runnable(){
+        @Override
+        public void run() {
+            Log.d("TAG_MAIN", "Thread started");
+            while (true){
+                Runnable task = queue.get();
+                task.run();
+            }
+        }
+    });
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -30,8 +45,8 @@ public class MainActivity extends AppCompatActivity {
         final RecyclerView recyclerView = findViewById(R.id.recyclerView);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
         recyclerView.setAdapter(mAdapter);
-
         showWelcomeDialog();
+        worker.start();
     }
 
     private void showWelcomeDialog() {
@@ -67,6 +82,54 @@ public class MainActivity extends AppCompatActivity {
 //                update(messageNewWithMillis);
 //            }
 //        }, CipherUtil.WORK_MILLIS);
+
+        Log.d("TAG_MAIN", Thread.currentThread().getName());
+
+         Runnable runnable = new Runnable() {
+            @Override
+             public void run() {
+                Log.d("TAG_MAIN", Thread.currentThread().getName());
+                String cipherMessage = CipherUtil.encrypt(message.value.plainText);
+                final Message messageNew = message.value.copy(cipherMessage);
+                final WithMillis<Message> messageNewWithMillis = new WithMillis<>(messageNew, CipherUtil.getTime());
+
+                new Handler(Looper.getMainLooper()).post(new Runnable() {
+                    @Override
+                     public void run() {
+                        update(messageNewWithMillis);
+                    }
+                });
+            }
+        };
+
+         queue.put(runnable);
+
+    }
+
+
+    static class BlockingQueue{
+        ArrayList<Runnable> tasks = new ArrayList<>();
+
+        public synchronized Runnable get(){
+            while (tasks.isEmpty()){
+                try {
+                    wait();
+                    Log.d("TAG_MAIN", Thread.currentThread().getName() + " thread sleep");
+                }catch (InterruptedException e){
+                    e.printStackTrace();
+                }
+            }
+            Runnable task = tasks.get(0);
+            tasks.remove(task);
+            return task;
+        }
+
+        public synchronized void put(Runnable task){
+            tasks.add(task);
+            Log.d("TAG_MAIN", Thread.currentThread().getName() + "thread up");
+            notifyAll();
+        }
+
     }
 
     @UiThread
