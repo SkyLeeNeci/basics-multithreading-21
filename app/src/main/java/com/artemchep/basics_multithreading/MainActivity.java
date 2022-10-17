@@ -3,6 +3,7 @@ package com.artemchep.basics_multithreading;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.Log;
 import android.view.View;
 
@@ -26,11 +27,11 @@ public class MainActivity extends AppCompatActivity {
     private MessageAdapter mAdapter = new MessageAdapter(mList);
 
     BlockingQueue queue = new BlockingQueue();
-    Thread worker = new Thread(new Runnable(){
+    Thread worker = new Thread(new Runnable() {
         @Override
         public void run() {
             Log.d("TAG_MAIN", "Thread started");
-            while (true){
+            while (true) {
                 Runnable task = queue.get();
                 task.run();
             }
@@ -83,39 +84,41 @@ public class MainActivity extends AppCompatActivity {
 //            }
 //        }, CipherUtil.WORK_MILLIS);
 
-        Log.d("TAG_MAIN", Thread.currentThread().getName());
+        Log.d("TAG_MAIN", "Must be main " +Thread.currentThread().getName());
 
-         Runnable runnable = new Runnable() {
+        final long time = SystemClock.elapsedRealtime();
+
+        Runnable runnable = new Runnable() {
             @Override
-             public void run() {
-                Log.d("TAG_MAIN", Thread.currentThread().getName());
+            public void run() {
                 String cipherMessage = CipherUtil.encrypt(message.value.plainText);
+                Log.d("TAG_MAIN", "CipherUtil.encrypt " + CipherUtil.getTime());
                 final Message messageNew = message.value.copy(cipherMessage);
-                final WithMillis<Message> messageNewWithMillis = new WithMillis<>(messageNew, CipherUtil.getTime());
-
+                final long elapsedTime = SystemClock.elapsedRealtime() - time;
+                Log.d("TAG_MAIN", "elapsedTime" + elapsedTime);
+                final WithMillis<Message> messageNewWithMillis = new WithMillis<>(messageNew, elapsedTime);
                 new Handler(Looper.getMainLooper()).post(new Runnable() {
                     @Override
-                     public void run() {
+                    public void run() {
                         update(messageNewWithMillis);
                     }
                 });
             }
         };
 
-         queue.put(runnable);
+        queue.put(runnable);
 
     }
 
-
-    static class BlockingQueue{
+    static class BlockingQueue {
         ArrayList<Runnable> tasks = new ArrayList<>();
 
-        public synchronized Runnable get(){
-            while (tasks.isEmpty()){
+        public synchronized Runnable get() {
+            while (tasks.isEmpty()) {
                 try {
                     wait();
                     Log.d("TAG_MAIN", Thread.currentThread().getName() + " thread sleep");
-                }catch (InterruptedException e){
+                } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
             }
@@ -124,12 +127,11 @@ public class MainActivity extends AppCompatActivity {
             return task;
         }
 
-        public synchronized void put(Runnable task){
+        public synchronized void put(Runnable task) {
             tasks.add(task);
             Log.d("TAG_MAIN", Thread.currentThread().getName() + "thread up");
             notifyAll();
         }
-
     }
 
     @UiThread
@@ -145,4 +147,9 @@ public class MainActivity extends AppCompatActivity {
         throw new IllegalStateException();
     }
 
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        worker.interrupt();
+    }
 }
